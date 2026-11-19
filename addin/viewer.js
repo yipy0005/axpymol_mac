@@ -50,7 +50,7 @@ async function waitForBridge(why) {
     const h = await health();
     if (!h) {
       showHelp("AxPyMOL Helper isn't running",
-        "The helper keeps PyMOL ready for your slides. Open <b>AxPyMOL Helper</b> (atom icon in the menu bar). This view will reconnect by itself.",
+        "Open <b>AxPyMOL Helper</b> (atom icon in the menu bar); it keeps PyMOL ready for your slides. If it is running but shows <b>!</b>, PyMOL.app is probably not installed. This view will reconnect by itself.",
         '<a href="axpymol://start">Open AxPyMOL Helper</a>');
     } else if (!h.pymol) {
       showHelp("PyMOL.app not found",

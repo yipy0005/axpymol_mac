@@ -221,6 +221,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if firstRun { welcome() }
         else if !certValid() || !manifestsInstalled() { _ = setup() }
         bridge.start()
+        if bridge.state == .noPyMOL { pymolMissing() }
         Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in self?.bridge.poll() }
         bridge.poll(); refresh()
     }
@@ -277,6 +278,19 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if box.state == .on { try? SMAppService.mainApp.register() }
         if problems.isEmpty { howTo() } else { _ = alert("Setup needs attention", problems.joined(separator: "\n\n")) }
     }
+    /// PyMOL is required (the bridge runs on its Python). Tell the user plainly and offer the fixes.
+    func pymolMissing() {
+        NSApp.activate(ignoringOtherApps: true)
+        let a = NSAlert(); a.alertStyle = .warning
+        a.messageText = "PyMOL isn't installed"
+        a.informativeText = "AxPyMOL shows live scenes by running PyMOL on this Mac, but no PyMOL.app was found in Applications. Install PyMOL, or point AxPyMOL at it if it lives elsewhere. This helper will pick it up automatically once it's available."
+        a.addButton(withTitle: "Download PyMOL"); a.addButton(withTitle: "Choose PyMOL.app…"); a.addButton(withTitle: "Later")
+        switch a.runModal() {
+        case .alertFirstButtonReturn: NSWorkspace.shared.open(URL(string: "https://pymol.org/")!)
+        case .alertSecondButtonReturn: choosePyMOL()
+        default: break
+        }
+    }
     @objc func howTo() {
         _ = alert("Using AxPyMOL in PowerPoint",
                   "1. Quit and reopen PowerPoint.\n2. Insert → Add-ins → My Add-ins → Developer Add-ins → “AxPyMOL Live Scene”.\n3. Pick or upload a .pml / .pse in the slide, then present: drag to rotate, scroll to zoom.\n\nKeep this helper running (atom icon in the menu bar). PyMOL.app must be installed.")
@@ -284,6 +298,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc func repair() {
         let problems = setup()
         bridge.restart()
+        if findPyMOL() == nil { pymolMissing(); return }
         _ = alert(problems.isEmpty ? "Add-in installed" : "Setup needs attention",
                   problems.isEmpty ? "Restart PowerPoint to load the add-in." : problems.joined(separator: "\n\n"))
     }
