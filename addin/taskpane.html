@@ -1,0 +1,23 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>AxPyMOL</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="axpymol-token" content="__AXPYMOL_TOKEN__">
+<script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+<style>
+ :root{color-scheme:light dark;font-family:-apple-system,system-ui,sans-serif}
+ body{margin:0;padding:16px;font-size:13px}
+ h1{font-size:16px;margin:0 0 12px} button{width:100%;padding:8px;margin:6px 0;font-size:13px}
+ #status{margin-top:10px;min-height:2em;color:gray} .row{display:flex;gap:6px} .row label{flex:1}
+ input[type=number]{width:100%;box-sizing:border-box}
+</style></head><body>
+<h1>AxPyMOL for Mac</h1>
+<input type="file" id="file" multiple hidden>
+<input type="file" id="dir" webkitdirectory hidden>
+<div class="row"><label>Width<input type="number" id="w" value="1280"></label><label>Height<input type="number" id="h" value="720"></label></div>
+<button id="insert">Insert scene (.pse / .pml / structure)…</button>
+<button id="insertdir">Insert scene from folder…</button>
+<button id="open">Open selected scene live in PyMOL</button>
+<button id="refresh">Re-render selected scene</button>
+<div id="status">Checking bridge…</div>
+<script src="taskpane.js"></script>
+</body></html>
