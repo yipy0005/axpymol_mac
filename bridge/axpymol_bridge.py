@@ -5,7 +5,7 @@ POST /scenes          JSON {main, files:[{name,b64}]}  (.pse/.pdb/.cif/.pml + fi
                       -> {"id", "png_base64"}
 POST /scenes/<id>/render?w=&h=&ray=   -> re-render, returns PNG bytes
 GET  /open/<id>       -> launch live PyMOL window for the scene
-GET  /scenes          -> [{id, main, mtime}]       GET /scenes/<id> -> {id, main} or 404
+GET  /scenes          -> [{id, main, mtime, used, size}]   DELETE /scenes/<id> -> forget a scene       GET /scenes/<id> -> {id, main} or 404
 POST /scenes/<id>/frame  JSON {w,h,ray,turn,pan,zoom,scene,do,reset,info}
                       -> PNG from the scene's persistent PyMOL session (X-Axpymol: JSON meta)
 GET  /health
@@ -16,7 +16,7 @@ into the add-in pages the bridge serves, which a foreign website cannot read (no
 also carry a localhost Host header (DNS-rebinding) and, if they have an Origin, an allowed one.
 /open/* (a hyperlink click in a deck) is refused when the browser says the navigation is cross-site.
 """
-import base64, hmac, json, os, secrets, ssl, subprocess, sys, threading, time, uuid
+import base64, hmac, json, os, secrets, shutil, ssl, subprocess, sys, threading, time, uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
@@ -126,8 +126,27 @@ class Worker:
 WORKERS, WLOCK = {}, threading.Lock()
 
 
+def touch_used(path):
+    """Record that a scene is in use (the helper's 'clear old scenes' goes by this). Throttled to 1/min."""
+    f = path.parent / ".used"
+    try:
+        if not f.exists() or time.time() - f.stat().st_mtime > 60:
+            f.touch()
+    except OSError:
+        pass
+
+
+def scene_info(d):
+    created = (d / "main.txt").stat().st_mtime
+    used = (d / ".used").stat().st_mtime if (d / ".used").exists() else created
+    size = sum(f.stat().st_size for f in d.rglob("*") if f.is_file())
+    return {"id": d.name, "main": (d / "main.txt").read_text().strip(), "mtime": created,
+            "used": max(created, used), "size": size}
+
+
 def get_worker(sid):
     path = scene_path(sid)
+    touch_used(path)
     with WLOCK:
         w = WORKERS.get(sid)
         if not w or not w.alive():
@@ -151,7 +170,7 @@ class H(BaseHTTPRequestHandler):
         if origin in ORIGINS:
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Access-Control-Allow-Headers", "X-Axpymol-Token, Content-Type")
-            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
         for k, v in getattr(self, "extra", {}).items():
             self.send_header(k, v)
         self.extra = {}
@@ -209,16 +228,40 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, data, ct)
             if u.path == "/scenes":
                 out = []
-                for d in sorted(SCENES.glob("*/main.txt"), key=lambda p: -p.stat().st_mtime):
-                    out.append({"id": d.parent.name, "main": d.read_text().strip(), "mtime": d.stat().st_mtime})
+                for m in SCENES.glob("*/main.txt"):
+                    out.append(scene_info(m.parent))
+                out.sort(key=lambda s: -s["used"])
                 return self._json(200, out)
             if u.path.startswith("/scenes/") and u.path.count("/") == 2:
                 p = scene_path(u.path.split("/")[2])
                 return self._json(200, {"id": p.parent.name, "main": p.name})
             if u.path.startswith("/open/"):
-                p = launcher(scene_path(u.path.split("/")[2]))
+                sp = scene_path(u.path.split("/")[2])
+                touch_used(sp)
+                p = launcher(sp)
                 subprocess.Popen(["open", "-n", "-a", str(PYMOL_APP), "--args", str(p)])
                 return self._send(200, b"<html><body>Opening PyMOL\xe2\x80\xa6 you can close this tab.</body></html>", "text/html")
+            self._json(404, {"error": "not found"})
+        except FileNotFoundError:
+            self._json(404, {"error": "unknown scene"})
+        except Exception as e:
+            self._json(500, {"error": str(e)})
+
+    def do_DELETE(self):
+        u = urlparse(self.path)
+        if not self._guard(u.path):
+            return
+        parts = u.path.strip("/").split("/")
+        try:
+            if len(parts) == 2 and parts[0] == "scenes":
+                sid = parts[1]
+                scene_path(sid)  # validates id and existence
+                with WLOCK:
+                    w = WORKERS.pop(sid, None)
+                if w:
+                    w.stop()
+                shutil.rmtree(SCENES / sid)
+                return self._json(200, {"deleted": sid})
             self._json(404, {"error": "not found"})
         except FileNotFoundError:
             self._json(404, {"error": "unknown scene"})

@@ -141,6 +141,24 @@ func installManifests() -> String? {
 
 func setup() -> [String] { [ensureCert(), installManifests()].compactMap { $0 } }
 
+// MARK: - Stored scenes
+struct SceneDir { let url: URL; let used: Date; let size: Int }
+func listScenes() -> [SceneDir] {
+    let dir = support.appendingPathComponent("scenes")
+    var out: [SceneDir] = []
+    for u in (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? [] {
+        guard let created = (try? fm.attributesOfItem(atPath: u.appendingPathComponent("main.txt").path))?[.modificationDate] as? Date else { continue }
+        let usedMark = (try? fm.attributesOfItem(atPath: u.appendingPathComponent(".used").path))?[.modificationDate] as? Date
+        var size = 0
+        if let en = fm.enumerator(at: u, includingPropertiesForKeys: [.fileSizeKey]) {
+            for case let f as URL in en { size += (try? f.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0 }
+        }
+        out.append(SceneDir(url: u, used: max(created, usedMark ?? created), size: size))
+    }
+    return out
+}
+func human(_ bytes: Int) -> String { ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file) }
+
 // MARK: - Bridge process
 final class TrustLocal: NSObject, URLSessionDelegate {
     func urlSession(_ s: URLSession, didReceive c: URLAuthenticationChallenge,
@@ -250,6 +268,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         add(menu, "Install / Repair PowerPoint Add-in…", #selector(repair))
         add(menu, "Restart Bridge", #selector(restartBridge))
         add(menu, "Show Log", #selector(showLog))
+        add(menu, "Clear Old Scenes…", #selector(clearScenes))
         menu.addItem(.separator())
         let login = add(menu, "Start at Login", #selector(toggleLogin))
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
@@ -303,6 +322,42 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
                   problems.isEmpty ? "Restart PowerPoint to load the add-in." : problems.joined(separator: "\n\n"))
     }
     @objc func restartBridge() { bridge.restart() }
+    // "Clear Old Scenes…": pick an age, see exactly what would go, confirm.
+    var clearAlert: NSAlert?, clearPopup: NSPopUpButton?
+    static let ageChoices: [(String, Int?)] = [("Not used for 7 days", 7), ("Not used for 30 days", 30), ("Not used for 90 days", 90), ("All scenes", nil)]
+    func victims(_ days: Int?) -> [SceneDir] {
+        guard let d = days else { return listScenes() }
+        let cutoff = Date().addingTimeInterval(-Double(d) * 86400)
+        return listScenes().filter { $0.used < cutoff }
+    }
+    func describe(_ v: [SceneDir]) -> String {
+        v.isEmpty ? "Nothing to delete."
+            : "\(v.count) scene\(v.count == 1 ? "" : "s"), \(human(v.reduce(0) { $0 + $1.size })) will be deleted. Decks that embed their scene restore it automatically; scenes too large to embed would be lost."
+    }
+    @objc func clearChoiceChanged() {
+        guard let a = clearAlert, let p = clearPopup else { return }
+        let v = victims(App.ageChoices[p.indexOfSelectedItem].1)
+        a.informativeText = describe(v)
+        a.buttons.first?.isEnabled = !v.isEmpty
+    }
+    @objc func clearScenes() {
+        NSApp.activate(ignoringOtherApps: true)
+        let popup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 240, height: 26), pullsDown: false)
+        popup.addItems(withTitles: App.ageChoices.map { $0.0 }); popup.selectItem(at: 1)
+        popup.target = self; popup.action = #selector(clearChoiceChanged)
+        let a = NSAlert(); a.messageText = "Clear old scenes"
+        a.accessoryView = popup; a.addButton(withTitle: "Delete"); a.addButton(withTitle: "Cancel")
+        clearAlert = a; clearPopup = popup; clearChoiceChanged()
+        defer { clearAlert = nil; clearPopup = nil }
+        guard a.runModal() == .alertFirstButtonReturn else { return }
+        let days = App.ageChoices[popup.indexOfSelectedItem].1
+        let v = victims(days)
+        var failed = 0
+        for s in v { do { try fm.removeItem(at: s.url) } catch { failed += 1 } }
+        if days == nil { bridge.restart() } // drop live PyMOL sessions that were using deleted scenes
+        _ = alert(failed == 0 ? "Done" : "Some scenes could not be deleted",
+                  failed == 0 ? "Deleted \(v.count) scene\(v.count == 1 ? "" : "s")." : "\(failed) of \(v.count) failed.")
+    }
     @objc func showLog() {
         try? fm.createDirectory(at: logsDir, withIntermediateDirectories: true)
         NSWorkspace.shared.open(logsDir)
@@ -330,6 +385,10 @@ if args.contains("--check") {
     print("resources:", resources.path, fm.fileExists(atPath: resources.appendingPathComponent("bridge/axpymol_bridge.py").path) ? "(bridge present)" : "(bridge MISSING)")
     print("cert valid:", certValid(), " trusted:", fm.fileExists(atPath: certFile) ? certTrusted() : false)
     print("manifests installed:", manifestsInstalled())
+    exit(0)
+}
+if args.contains("--scenes") {
+    for sc in listScenes().sorted(by: { $0.used > $1.used }) { print(sc.url.lastPathComponent, human(sc.size), "used", sc.used) }
     exit(0)
 }
 if args.contains("--setup") { let p = setup(); p.forEach { print($0) }; exit(p.isEmpty ? 0 : 1) }

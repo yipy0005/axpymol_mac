@@ -62,6 +62,10 @@ async function waitForBridge(why) {
 }
 function fail(e) {
   if (e instanceof TypeError) return waitForBridge(); // network error: bridge went away
+  if (/unknown scene/.test(e.message) && cfg && cfg.bundle && !fail.restoring) { // embedded in the deck: bring it back
+    fail.restoring = true; start().finally(() => { fail.restoring = false; }); return;
+  }
+  if (/unknown scene/.test(e.message)) return showPicker("That scene is no longer on this Mac. Pick or upload another.");
   if (/PyMOL session ended/.test(e.message))
     return showHelp("PyMOL stopped", "The PyMOL session ended unexpectedly. Choose the helper's <b>Show Log</b> for details.",
       '<button onclick="location.reload()">Reload</button>');
@@ -147,13 +151,45 @@ $("ray").onchange = () => settle();
 window.addEventListener("resize", () => { clearTimeout(settleTimer); settleTimer = setTimeout(settle, 200); });
 
 // --- scene picker ---
-async function showPicker() {
+const fmtSize = (b) => (b >= 1e6 ? (b / 1e6).toFixed(1) + " MB" : Math.max(1, Math.round(b / 1e3)) + " KB");
+function fmtAgo(t) {
+  const d = (Date.now() / 1000 - t) / 86400;
+  if (d < 1 / 24) return "just now";
+  if (d < 1) return Math.round(d * 24) + " h ago";
+  if (d < 60) return Math.round(d) + " d ago";
+  return Math.round(d / 30) + " mo ago";
+}
+const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+async function showPicker(msg) {
   $("pick").style.display = "block";
+  $("pmsg").textContent = typeof msg === "string" ? msg : "";
+  resetDel();
   try {
     const list = await (await api(`/scenes`)).json();
-    $("existing").innerHTML = list.map((s) => `<option value="${s.id}">${s.main} (${s.id})</option>`).join("");
+    $("existing").innerHTML = list.length
+      ? list.map((s) => `<option value="${s.id}">${esc(s.main)} · ${fmtSize(s.size)} · used ${fmtAgo(s.used)}</option>`).join("")
+      : "";
+    if (cfg && cfg.id) $("existing").value = cfg.id;
   } catch { $("pmsg").textContent = "Bridge not reachable."; }
 }
+// Two-step delete (window.confirm is unreliable inside Office add-in panes).
+let delArmed = false;
+function resetDel() { delArmed = false; $("del").textContent = "Delete selected scene…"; }
+$("del").onclick = async () => {
+  const id = $("existing").value; if (!id) return ($("pmsg").textContent = "Pick a scene first.");
+  if (!delArmed) {
+    delArmed = true;
+    $("del").textContent = "Click again to confirm. Decks that don't embed this scene will break.";
+    return;
+  }
+  resetDel();
+  try {
+    const r = await api(`/scenes/${id}`, { method: "DELETE" });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status);
+    if (cfg && cfg.id === id && !cfg.bundle) { cfg = null; settings().remove(KEY); settings().saveAsync(() => {}); }
+    await showPicker("Scene deleted.");
+  } catch (e) { $("pmsg").textContent = "Delete failed: " + e.message; }
+};
 async function choose(fn) {
   try { $("pmsg").textContent = "Working…"; await fn(); $("pick").style.display = "none"; await start(); }
   catch (e) { $("pmsg").textContent = "Error: " + e.message; }

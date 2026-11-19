@@ -57,3 +57,6 @@ But a page *served by the helper* can't load at all when the helper is down, so 
 - Publish `docs/` (e.g. GitHub Pages), then `pixi run python scripts/make_manifest.py https://<user>.github.io/axpymol_mac > manifest.content.xml` and ship that manifest instead of the default.
 - Test locally first: `pixi run python scripts/serve_docs.py` (https://localhost:3445, same trusted cert) and generate the manifest with `https://localhost:3445`.
 - Untested inside PowerPoint: whether the task-pane web view follows the cross-origin redirect and honours `axpymol://`.
+
+## Managing stored scenes
+Every upload is kept in `~/Library/Application Support/AxPyMOL/scenes/`. In the viewer's scene picker (⋯ button) each scene shows its size and when it was last used, and **Delete selected scene…** removes it (two clicks to confirm; `DELETE /scenes/<id>` on the bridge). The helper's **Clear Old Scenes…** menu item deletes scenes not used for 7/30/90 days, or all of them, after showing how many and how much space. Decks that embed their scene restore it automatically; scenes too large to embed (>1.5 MB) are lost. Tests: `pixi run python tests/test_scenes.py`.
