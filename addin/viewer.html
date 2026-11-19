@@ -14,9 +14,13 @@
  #cmd{flex:1;min-width:0}
  #msg{position:fixed;top:6px;left:8px;color:#aaa}
  #pick{position:fixed;inset:0;background:#111;padding:16px;overflow:auto;display:none}
+ #help{position:fixed;inset:0;background:#111e;display:none;align-items:center;justify-content:center;padding:16px;text-align:center}
+ #help .card{max-width:420px} #help h3{margin:0 0 8px;font-size:16px} #help p{margin:6px 0;color:#bbb;line-height:1.4}
+ #help a,#help button{display:inline-block;margin:6px 4px;padding:6px 12px;border:1px solid #666;border-radius:4px;color:#eee;background:#222;text-decoration:none;font-size:13px}
  #pick button,#pick select{font-size:13px;padding:6px;margin:4px 0;display:block;width:100%}
 </style></head><body>
 <div id="stage"><canvas id="c"></canvas></div>
+<div id="help"><div class="card"><h3 id="ht"></h3><p id="hb"></p><div id="hx"></div></div></div>
 <div id="msg">Starting…</div>
 <div id="bar">
   <button id="reset" title="Reset view (or double-click)">Reset</button>

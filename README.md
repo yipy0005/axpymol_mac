@@ -37,3 +37,11 @@ The bridge runs PyMOL commands, so it is locked down: loopback only; `Host` must
 - The helper runs the bridge with PyMOL.app's own Python (no Python install needed; PyMOL.app is auto-detected or chosen from the menu), restarts it if it dies, and shows its status in the menu bar (atom icon, `!` when something needs attention). Menu: Repair add-in, Restart bridge, Show log (`~/Library/Logs/AxPyMOL`), Start at login, Quit.
 - `AxPyMOLHelper --check` prints environment status; `--setup` runs setup headlessly.
 - Ad-hoc signed by default (recipients must right-click → Open the first time). For wide distribution sign with a Developer ID (`SIGN_ID=… scripts/build_app.sh`) and notarize.
+
+## Friendly "helper not running" state
+Inside the viewer (already loaded): if the helper stops or PyMOL is missing, it shows a message and reconnects by itself.
+But a page *served by the helper* can't load at all when the helper is down, so for a first-load message use the hosted front door:
+- `docs/launch.html` polls `https://localhost:3443/health`; if up it forwards to the live viewer (keeping Office's query string), otherwise it shows install/start steps and an `axpymol://start` button (the helper registers that URL scheme).
+- Publish `docs/` (e.g. GitHub Pages), then `pixi run python scripts/make_manifest.py https://<user>.github.io/axpymol_mac > manifest.content.xml` and ship that manifest instead of the default.
+- Test locally first: `pixi run python scripts/serve_docs.py` (https://localhost:3445, same trusted cert) and generate the manifest with `https://localhost:3445`.
+- Untested inside PowerPoint: whether the task-pane web view follows the cross-origin redirect and honours `axpymol://`.

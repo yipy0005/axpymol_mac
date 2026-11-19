@@ -12,4 +12,8 @@
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSAppleEventsUsageDescription</key><string>AxPyMOL hides its background PyMOL window while presenting.</string>
+  <key>CFBundleURLTypes</key><array><dict>
+    <key>CFBundleURLName</key><string>AxPyMOL Helper</string>
+    <key>CFBundleURLSchemes</key><array><string>axpymol</string></array>
+  </dict></array>
 </dict></plist>
