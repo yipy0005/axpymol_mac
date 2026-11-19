@@ -1,18 +1,30 @@
 # AxPyMOL for Mac
 
+## Install (users)
+Requires macOS 13+, PowerPoint for Mac, and [PyMOL](https://pymol.org/) installed in Applications.
+
+1. Download `AxPyMOL-Helper-<version>.dmg` from [Releases](https://github.com/yipy0005/axpymol_mac/releases), open it, and drag **AxPyMOL Helper** to Applications.
+2. The app is not notarized, so macOS will refuse the first launch ("cannot be opened"). Either:
+   - open **System Settings → Privacy & Security**, scroll down and click **Open Anyway** next to AxPyMOL Helper (on older macOS: right-click the app → Open), or
+   - run `xattr -dr com.apple.quarantine "/Applications/AxPyMOL Helper.app"` in Terminal.
+3. Follow the welcome: it asks for your password once (to trust a local certificate) and a Terminal window briefly installs the add-in into PowerPoint.
+4. Restart PowerPoint → Insert → Add-ins → My Add-ins → Developer Add-ins → **AxPyMOL Live Scene**.
+
+The rest of this README is for developers.
+
 Mac PowerPoint has no ActiveX, so this is an Office add-in plus a local bridge to PyMOL.
 
 - `bridge/` – local HTTPS service (stdlib Python). Renders scenes with PyMOL.app's bundled Python, stores them, opens them live, and serves the add-in.
-- `addin/` – Office.js task-pane add-in (insert scene, open live, re-render).
+- `addin/` – Office.js add-ins: `viewer.*` + `manifest.content.xml` (live scene, current) and `taskpane.*` + `manifest.xml` (legacy static-image tool).
 - `tools/axpptx.py` – inspect/extract content from Windows AxPyMOL decks.
 
-## Setup
+## Developer setup (legacy task-pane add-in, no longer installed by the helper)
 1. `scripts/setup_certs.sh` (once; trusts a localhost cert, asks for sudo)
 2. `python3 bridge/axpymol_bridge.py` (leave running)
 3. Sideload: `mkdir -p ~/Library/Containers/com.microsoft.Powerpoint/Data/Documents/wef && cp addin/manifest.xml ~/Library/Containers/com.microsoft.Powerpoint/Data/Documents/wef/`
 4. Restart PowerPoint → Insert → My Add-ins → AxPyMOL.
 
-## Use
+## Legacy task-pane use
 Insert a `.pse`/`.pdb`/`.cif` → a rendered image is placed on the slide, tagged with a scene id and hyperlinked. In slideshow, clicking it opens the live scene in PyMOL.
 
 ## Status / limitations
